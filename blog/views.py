@@ -84,8 +84,11 @@ def index(request):
 
 
 def post_detail(request, slug):
-    post = Post.objects.get(slug=slug)
-    comments = Comment.objects.filter(post=post)
+    post = (Post.objects.annotate(likes_count=Count('likes'))
+                        .select_related('author')
+                        .get(slug=slug))
+    comments = post.comments.select_related('author')
+
     serialized_comments = []
     for comment in comments:
         serialized_comments.append({
@@ -94,33 +97,40 @@ def post_detail(request, slug):
             'author': comment.author.username,
         })
 
-    likes = post.likes.all()
-
-    related_tags = post.tags.all()
+    related_tags = post.tags.annotate(posts_count=Count('posts'))
 
     serialized_post = {
         'title': post.title,
         'text': post.text,
         'author': post.author.username,
         'comments': serialized_comments,
-        'likes_amount': len(likes),
+        'likes_amount': post.likes_count,
         'image_url': post.image.url if post.image else None,
         'published_at': post.published_at,
         'slug': post.slug,
-        'tags': [serialize_tag(tag) for tag in related_tags],
+        'tags': [serialize_tag_optimized(tag) for tag in related_tags],
     }
 
-    most_popular_tags = Tag.objects.popular()[:5]
+    most_popular_tags = (Tag.objects.popular()
+                                    .annotate(posts_count=Count('posts'))[:5])
+
+    prefetch_tags = Prefetch(
+        'tags',
+        queryset=Tag.objects.all().annotate(posts_count=Count('posts'))
+    )
 
     most_popular_posts = (Post.objects.popular()
-                                      .prefetch_related('author')[:5]
+                                      .prefetch_related('author')
+                                      .prefetch_related(prefetch_tags)[:5]
                                       .fetch_with_comments_count())
 
     context = {
         'post': serialized_post,
-        'popular_tags': [serialize_tag(tag) for tag in most_popular_tags],
+        'popular_tags': [
+            serialize_tag_optimized(tag) for tag in most_popular_tags
+        ],
         'most_popular_posts': [
-            serialize_post(post) for post in most_popular_posts
+            serialize_post_optimized(post) for post in most_popular_posts
         ],
     }
     return render(request, 'post-details.html', context)
