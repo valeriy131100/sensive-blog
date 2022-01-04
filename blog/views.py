@@ -129,20 +129,34 @@ def post_detail(request, slug):
 def tag_filter(request, tag_title):
     tag = Tag.objects.get(title=tag_title)
 
-    most_popular_tags = Tag.objects.popular()[:5]
+    most_popular_tags = (Tag.objects.popular()
+                                    .annotate(posts_count=Count('posts'))[:5])
+
+    prefetch_tags = Prefetch(
+        'tags',
+        queryset=Tag.objects.all().annotate(posts_count=Count('posts'))
+    )
 
     most_popular_posts = (Post.objects.popular()
-                                      .prefetch_related('author')[:5]
+                                      .prefetch_related('author')
+                                      .prefetch_related(prefetch_tags)[:5]
                                       .fetch_with_comments_count())
 
-    related_posts = tag.posts.all()[:20]
+    related_posts = (tag.posts.all()
+                              .prefetch_related('author')
+                              .prefetch_related(prefetch_tags)[:20]
+                              .annotate(comments_count=Count('comments')))
 
     context = {
         'tag': tag.title,
-        'popular_tags': [serialize_tag(tag) for tag in most_popular_tags],
-        'posts': [serialize_post(post) for post in related_posts],
+        'popular_tags': [
+            serialize_tag_optimized(tag) for tag in most_popular_tags
+        ],
+        'posts': [
+            serialize_post_optimized(post) for post in related_posts
+        ],
         'most_popular_posts': [
-            serialize_post(post) for post in most_popular_posts
+            serialize_post_optimized(post) for post in most_popular_posts
         ],
     }
     return render(request, 'posts-list.html', context)
