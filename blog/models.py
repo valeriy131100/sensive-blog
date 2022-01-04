@@ -8,20 +8,22 @@ class PostQuerySet(models.QuerySet):
 
     def year(self, year):
         posts_at_year = (self.filter(published_at__year=year)
-                         .order_by('published_at'))
+                             .order_by('published_at'))
         return posts_at_year
 
     def popular(self):
         popular_posts = (self.annotate(likes_count=Count('likes'))
-                         .prefetch_related('author')
-                         .order_by('-likes_count'))
+                             .prefetch_related('author')
+                             .order_by('-likes_count'))
         return popular_posts
 
     def fetch_with_comments_count(self):
         posts_ids = [post.id for post in self]
 
-        posts_with_comments = (Post.objects.filter(id__in=posts_ids)
-                               .annotate(comments_count=Count('comments')))
+        posts_with_comments = (
+            Post.objects.filter(id__in=posts_ids)
+                        .annotate(comments_count=Count('comments'))
+        )
         ids_and_comments = posts_with_comments.values_list(
             'id',
             'comments_count'
@@ -74,7 +76,7 @@ class TagQuerySet(models.QuerySet):
 
     def popular(self):
         popular_tags = (self.annotate(related_posts_count=Count('posts'))
-                        .order_by('related_posts_count'))
+                            .order_by('related_posts_count'))
 
         return popular_tags
 
@@ -104,11 +106,13 @@ class Comment(models.Model):
         'Post',
         on_delete=models.CASCADE,
         verbose_name='Пост, к которому написан',
-        related_name='comments')
+        related_name='comments'
+    )
     author = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        verbose_name='Автор')
+        verbose_name='Автор'
+    )
 
     text = models.TextField('Текст комментария')
     published_at = models.DateTimeField('Дата и время публикации')
